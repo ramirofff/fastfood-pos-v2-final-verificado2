@@ -1,95 +1,88 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import CategorySelector from "./components/CategorySelector";
 import ProductList from "./components/ProductList";
 import Cart from "./components/Cart";
 import Receipt from "./components/Receipt";
+import SalesHistory from "./components/SalesHistory";
+import ProductEditor from "./components/ProductEditor";
 
-const categories = [
-  {
-    name: "Burgers",
-    products: [
-      { id: 1, name: "🍔 Hamburguesa Clásica", price: 5 },
-      { id: 2, name: "🍔 Doble Hamburguesa", price: 7 },
-    ],
-  },
-  {
-    name: "Sides",
-    products: [
-      { id: 3, name: "🍟 Papas Fritas", price: 3 },
-      { id: 4, name: "🧀 Nachos", price: 4 },
-    ],
-  },
-  {
-    name: "Drinks",
-    products: [
-      { id: 5, name: "🥤 Bebida", price: 2 },
-      { id: 6, name: "☕ Café", price: 2 },
-    ],
-  },
-];
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+  image: string;
+  category: string;
+}
 
-export default function Home() {
-  const [cart, setCart] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState("Burgers");
-  const [showReceipt, setShowReceipt] = useState(false);
+export default function HomePage() {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [cart, setCart] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
-  // Cargar carrito desde localStorage al inicio
   useEffect(() => {
-    const stored = localStorage.getItem("fastfood_cart");
-    if (stored) setCart(JSON.parse(stored));
+    const stored = localStorage.getItem("productList");
+    if (stored) {
+      setProducts(JSON.parse(stored));
+    }
   }, []);
 
-  // Guardar carrito en localStorage cada vez que cambie
-  useEffect(() => {
-    localStorage.setItem("fastfood_cart", JSON.stringify(cart));
-  }, [cart]);
-
-  const addToCart = (product) => {
-    setCart([...cart, product]);
-  };
-
-  const removeFromCart = (index) => {
-    const updated = cart.filter((_, i) => i !== index);
-    setCart(updated);
-  };
-
-  const handlePayment = async () => {
-    setShowReceipt(true);
-
-    // ⚠️ Preparado para integrar Stripe:
-    /*
-    const stripe = await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!);
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      body: JSON.stringify({ items: cart }),
-    });
-    const session = await res.json();
-    await stripe.redirectToCheckout({ sessionId: session.id });
-    */
-  };
+  const categories = Array.from(new Set(products.map((p) => p.category)));
 
   return (
-    <main className="max-w-6xl mx-auto p-4 bg-white min-h-screen">
-      <h1 className="text-3xl font-bold text-center mb-6">🍟 FastFood POS</h1>
+    <main className="p-4 max-w-screen-xl mx-auto">
+      <h1 className="text-2xl font-bold text-center mb-6">FastFood POS</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Zona de productos */}
+        <div>
           <CategorySelector
             categories={categories}
             selectedCategory={selectedCategory}
             setSelectedCategory={setSelectedCategory}
           />
           <ProductList
-            products={categories.find((cat) => cat.name === selectedCategory)?.products || []}
-            addToCart={addToCart}
+            products={products}
+            selectedCategory={selectedCategory}
+            addToCart={(product) => setCart([...cart, product])}
           />
         </div>
-        <Cart cart={cart} removeFromCart={removeFromCart} onPay={handlePayment} />
+
+        {/* Carrito y recibo */}
+        <div>
+          <Cart
+            cart={cart}
+            setCart={setCart}
+            onCheckout={(items, total, discount) => {
+              const today = new Date().toISOString().split("T")[0];
+              const now = new Date().toLocaleTimeString();
+
+              const sale = {
+                items,
+                total,
+                discount,
+                date: now,
+              };
+
+              const data = JSON.parse(localStorage.getItem("salesHistory") || "{}");
+              if (!data[today]) data[today] = [];
+              data[today].push(sale);
+              localStorage.setItem("salesHistory", JSON.stringify(data));
+
+              window.print(); // imprimir ticket
+              setCart([]);
+            }}
+          />
+
+          <Receipt items={cart} total={cart.reduce((a, p) => a + p.price, 0)} />
+        </div>
       </div>
 
-      {showReceipt && <Receipt cart={cart} onClose={() => setShowReceipt(false)} />}
+      {/* Editor de productos */}
+      <ProductEditor />
+
+      {/* Historial */}
+      <SalesHistory />
     </main>
   );
 }
